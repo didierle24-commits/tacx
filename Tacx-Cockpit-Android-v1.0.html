@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Tacx Cockpit Android — Web Bluetooth</title>
+<style>
+  :root { font-family: "Segoe UI", system-ui, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0f172a; color:#e2e8f0; font-size:16px; }
+  header { padding:12px 16px; background:#1e293b; border-bottom:2px solid #38bdf8; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:1.2rem; color:#f8fafc; }
+  header .badge { background:#38bdf8; color:#0f172a; font-weight:700; border-radius:12px; padding:3px 10px; font-size:.72rem; }
+  #status { margin-left:auto; font-size:.78rem; color:#94a3b8; }
+  main { padding:12px; max-width:900px; margin:0 auto; }
+  .cards { display:grid; grid-template-columns:1fr; gap:12px; }
+  @media (min-width:820px){ .cards { grid-template-columns:1fr 1fr; } }
+  .card { background:#1e293b; border-radius:14px; padding:14px 16px; border:1px solid #334155; }
+  .card h2 { margin:0 0 10px; font-size:.95rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; }
+  .conn { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .dot { width:12px; height:12px; border-radius:50%; background:#64748b; flex:0 0 auto; }
+  .dot.on { background:#22c55e; box-shadow:0 0 8px #22c55e; }
+  button { background:#f59e0b; color:#0f172a; border:none; border-radius:10px; padding:12px 18px; font-weight:700; cursor:pointer; font-size:.95rem; min-height:44px; }
+  button:active { background:#fbbf24; }
+  button.ghost { background:#334155; color:#e2e8f0; }
+  button.danger { background:#dc2626; color:#fff; }
+  button:disabled { opacity:.4; }
+  .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; text-align:center; }
+  .metric .val { font-size:2rem; font-weight:800; color:#f8fafc; line-height:1.1; }
+  .metric .unit { font-size:.75rem; color:#64748b; }
+  .metric .lbl { font-size:.68rem; color:#94a3b8; text-transform:uppercase; }
+  .p-assioma { color:#38bdf8; } .p-hr { color:#fb7185; }
+  .cmd { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+  .cmd input { width:90px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:10px; font-size:1rem; }
+  .cmd label { font-size:.8rem; color:#94a3b8; }
+  canvas { width:100%; height:240px; background:#0f172a; border-radius:10px; }
+  .log { font-size:.72rem; color:#64748b; margin-top:8px; font-family:Consolas,monospace; max-height:90px; overflow:auto; }
+  .legend { display:flex; gap:14px; font-size:.75rem; color:#94a3b8; margin:8px 2px; flex-wrap:wrap; }
+  .swatch { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  #voiceBtn.mic-on { background:#22c55e; animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,.5);} 50% { box-shadow:0 0 0 8px rgba(34,197,94,0);} }
+  #voiceHeard { color:#22d3ee; font-weight:600; }
+  details { border:1px solid #334155; border-radius:10px; padding:8px 12px; margin-top:10px; }
+  details summary { cursor:pointer; color:#94a3b8; font-size:.85rem; font-weight:700; }
+  #progTable table { width:100%; border-collapse:collapse; font-size:.8rem; }
+  #progTable td, #progTable th { padding:5px 6px; }
+  .counterCard { display:flex; justify-content:space-around; gap:10px; flex-wrap:wrap; }
+  .counterBox { text-align:center; flex:1; min-width:140px; background:#0f172a; border:1px solid #334155; border-radius:12px; padding:10px 6px; }
+  .counterBox .title { font-size:.7rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+  .counter { display:inline-flex; gap:3px; background:#020617; border:1px solid #334155; border-radius:10px; padding:8px 10px; }
+  .counter .digit { display:inline-block; min-width:34px; padding:6px 4px; font-family:Consolas,monospace; font-size:2rem; font-weight:700; text-align:center; background:#111827; border-radius:6px; color:#22d3ee; }
+  .counter .digit.g { color:#e2e8f0; }
+  #seuilsBox input { width:58px; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:8px; padding:6px; font-size:.95rem; }
+  .bleBtns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:10px; }
+  .bleBtns button { font-size:.85rem; padding:12px 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚴 Tacx Cockpit <span style="color:#38bdf8;font-size:.6em" id="versionTag">Android v1.0</span></h1>
+  <span class="badge">Web Bluetooth direct</span>
+  <span id="status">Tablette — aucun appareil connecté</span>
+</header>
+<main>
+  <div class="card" style="margin-bottom:12px">
+    <h2>Connexions Bluetooth</h2>
+    <div class="bleBtns">
+      <button id="btnTacx" class="ghost">🔌 Tacx</button>
+      <button id="btnAss" class="ghost">🔌 Assioma</button>
+      <button id="btnHr" class="ghost">🔌 Cardio</button>
+    </div>
+    <div class="conn"><span class="dot" id="dotTacx"></span><span id="tacxName" style="font-size:.85rem;color:#94a3b8">Tacx : non connecté</span></div>
+    <div class="conn"><span class="dot" id="dotAssioma"></span><span id="assName" style="font-size:.85rem;color:#94a3b8">Pédales : non connectées</span></div>
+    <div class="conn"><span class="dot" id="dotHR"></span><span id="hrName" style="font-size:.85rem;color:#94a3b8">Cardio : non connecté</span></div>
+    <div class="cmd">
+      <button id="btnWake" class="ghost">💡 Écran maintenu allumé : off</button>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h2>Home trainer</h2>
+      <div class="metrics">
+        <div class="metric"><div class="val" id="tacxP">–</div><div class="unit">W</div><div class="lbl">Puissance</div></div>
+        <div class="metric"><div class="val" id="tacxC">–</div><div class="unit">tr/min</div><div class="lbl">Cadence</div></div>
+        <div class="metric"><div class="val" id="tacxS">–</div><div class="unit">km/h</div><div class="lbl">Vitesse</div></div>
+      </div>
+      <div class="cmd">
+        <label>ERG <input id="ergW" type="number" value="100" min="0" max="1000"></label>
+        <button id="btnErg">Cible W</button>
+        <label>Pente % <input id="slope" type="number" value="0" min="-30" max="30" step="0.5"></label>
+        <button id="btnSlope">Pente</button>
+        <button id="btnStop" class="danger">STOP</button>
+        <button id="voiceBtn" class="ghost">🎤 Commande vocale</button>
+      </div>
+      <div style="margin-top:6px"><span id="voiceHeard"></span></div>
+    </div>
+    <div class="card">
+      <h2>Pédales Assioma</h2>
+      <div class="metrics">
+        <div class="metric"><div class="val p-assioma" id="assP">–</div><div class="unit">W</div><div class="lbl">Puissance</div></div>
+        <div class="metric"><div class="val p-assioma" id="assC">–</div><div class="unit">tr/min</div><div class="lbl">Cadence</div></div>
+        <div class="metric"><div class="val p-assioma" id="assBal">–</div><div class="unit">%</div><div class="lbl">Équilibre G/D</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Fréquence cardiaque</h2>
+      <div class="metrics">
+        <div class="metric"><div class="val p-hr" id="hrBpm">–</div><div class="unit">bpm</div><div class="lbl">Pouls</div></div>
+        <div class="metric"><div class="val p-hr" id="hrMax">–</div><div class="unit">bpm</div><div class="lbl">Max séance</div></div>
+        <div class="metric"><div class="val p-hr" id="hrAvg">–</div><div class="unit">bpm</div><div class="lbl">Moyenne</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Compteurs cadence</h2>
+      <div class="counterCard">
+        <div class="counterBox">
+          <div class="title">Cadence Tacx</div>
+          <div class="counter"><span class="digit" id="cptTacx">0</span><span class="digit g" id="cptTacxU">0</span><span class="unit" style="align-self:flex-end;font-size:.75rem;color:#64748b;padding-bottom:8px;margin-left:4px">tr/min</span></div>
+        </div>
+        <div class="counterBox">
+          <div class="title">Cadence Assioma</div>
+          <div class="counter"><span class="digit" id="cptAss">0</span><span class="digit g" id="cptAssU">0</span><span class="unit" style="align-self:flex-end;font-size:.75rem;color:#64748b;padding-bottom:8px;margin-left:4px">tr/min</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h2>Données du test</h2>
+    <div class="cmd">
+      <input type="file" id="fichierProg" accept=".csv,.txt" style="display:none">
+      <button id="btnCharger" class="ghost">📂 Charger le programme (CSV)</button>
+      <button id="btnTest" disabled>▶ Début test</button>
+      <button id="btnAbort" class="danger" disabled>■ Arrêter</button>
+    </div>
+    <div id="testInfo" style="font-size:.85rem;color:#94a3b8;margin:8px 0">Aucun programme chargé. Sur la tablette : feuille « Paliers » exportée en CSV (Excel → Enregistrer sous → CSV), ou fichier CSV direct.</div>
+    <div id="seuilsBox" style="margin:6px 0 10px;font-size:.8rem;border:1px solid #334155;border-radius:8px;padding:10px">
+      <div style="color:#94a3b8;font-weight:700;margin-bottom:6px">SEUILS VENTILATOIRES <span style="font-weight:400">(réf. hôpital, modifiables)</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label>VT1&nbsp;FC <input id="seuilFc1" type="number" value="109" min="80" max="200"></label>
+        <label>VT1&nbsp;W <input id="seuilW1" type="number" value="175" min="0" step="5"></label>
+        <label>VT2&nbsp;FC <input id="seuilFc2" type="number" value="137" min="80" max="200"></label>
+        <label>VT2&nbsp;W <input id="seuilW2" type="number" value="275" min="0" step="5"></label>
+        <button id="seuilVoice" class="ghost" style="padding:6px 10px;font-size:.75rem">📢 Annonces : off</button>
+      </div>
+      <div id="seuilsLive" style="margin-top:6px;color:#64748b">Zone : — (test non lancé)</div>
+    </div>
+    <details id="progDetails">
+      <summary>Aperçu du programme</summary>
+      <div id="progTable"></div>
+    </details>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h2>Courbes temps réel</h2>
+    <div class="legend">
+      <span><span class="swatch" style="background:#f59e0b"></span>Tacx (W)</span>
+      <span><span class="swatch" style="background:#38bdf8"></span>Assioma (W)</span>
+      <span><span class="swatch" style="background:#fb7185"></span>Cardio (bpm — axe droite)</span>
+      <span><span class="swatch" style="background:#4ade80"></span>Consigne (vert pointillé)</span>
+      <span><span class="swatch" style="background:#64748b;opacity:.45"></span>Sorties précédentes</span>
+    </div>
+    <canvas id="chart" width="1150" height="240"></canvas>
+    <div class="cmd" style="margin-top:10px">
+      <button id="btnCsv" class="ghost">📤 Exporter la séance (CSV)</button>
+      <span style="font-size:.75rem;color:#64748b" id="recInfo"></span>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+</main>
+<script>
+"use strict";
+const VERSION = "Android v1.0";
+const $ = id => document.getElementById(id);
+const logEl = $("log");
+function log(msg) {
+  logEl.innerHTML = new Date().toLocaleTimeString() + " — " + msg + "<br>" + logEl.innerHTML;
+}
+if (!navigator.bluetooth) {
+  log("⚠ Web Bluetooth indisponible — utilisez Chrome Android avec une page servie en HTTPS (ou flag « origine non sécurisée »).");
+}
+
+// ============================== état ========================================
+const state = {
+  tacx: { p: null, c: null, s: null }, ass: { p: null, c: null, bal: null }, hr: null,
+  hrMax: 0, hrSum: 0, hrN: 0
+};
+const stats = { tacx: 0, ass: 0, hr: 0 };
+const series = { t: [], tacx: [], ass: [], hr: [], cadT: [], cadA: [] };
+const sessions = [];
+const T0 = Date.now();
+function push(key, val, cad) {
+  if (val === null || val === undefined) return;
+  series.t.push((Date.now() - T0) / 1000);
+  series.tacx.push(key === "tacx" ? val : null);
+  series.ass.push(key === "ass" ? val : null);
+  series.hr.push(key === "hr" ? val : null);
+  series.cadT.push(key === "tacx" && cad !== undefined ? cad : null);
+  series.cadA.push(key === "ass" && cad !== undefined ? cad : null);
+  if (series.t.length > 20000)
+    ["t","tacx","ass","hr","cadT","cadA"].forEach(k => series[k].shift());
+}
+
+// ============================== Web Bluetooth ===============================
+const TACX_SERVICE = "6e40fec1-b5a3-f393-e0a9-e50e24dcca9e";
+const TACX_RX = "6e40fec3-b5a3-f393-e0a9-e50e24dcca9e";   // écriture des commandes
+const TACX_TX = "6e40fec2-b5a3-f393-e0a9-e50e24dcca9e";   // notifications mesures
+const CP_SERVICE = "00001818-0000-1000-8000-00805f9b34fb";
+const CP_MEASURE = "00002a63-0000-1000-8000-00805f9b34fb";
+const HR_SERVICE = "0000180d-0000-1000-8000-00805f9b34fb";
+const HR_MEASURE = "00002a37-0000-1000-8000-00805f9b34fb";
+
+const BLE = { tacx: { dev: null, rx: null, tx: null }, ass: null, hr: null };
+
+// ---- trames FE-C (traduites de tacx-bridge.py, validées sur Neo 2T) -------
+function withChecksum(paquet) {
+  const b = paquet.slice();
+  let s = 0;
+  for (let i = 1; i < b.length; i++) s = (s + b[i]) & 0xFF;
+  b.push(s);
+  return new Uint8Array(b);
+}
+function pktTargetPower(watts) {
+  const w = Math.round(watts / 0.25);
+  return withChecksum([0xA4, 0x09, 0x4F, 0x05, 0x31, 0xFF, 0xFF, 0xFF,
+                       0xFF, 0xFF, w & 0xFF, (w >> 8) & 0xFF]);
+}
+function pktBasicRes(pct) {
+  return withChecksum([0xA4, 0x09, 0x4F, 0x05, 0x30, 0xFF, 0xFF, 0xFF,
+                       0xFF, 0xFF, Math.round(pct * 2)]);
+}
+function pktTrack(grade) {
+  const g = Math.round((grade + 200) / 0.01);
+  return withChecksum([0xA4, 0x09, 0x4F, 0x05, 0x33, 0xFF, 0xFF, 0xFF,
+                       0xFF, g & 0xFF, (g >> 8) & 0xFF, 80]);
+}
+function pktRequest(page) {
+  return withChecksum([0xA4, 0x09, 0x4F, 0x05, 0x46, 0xFF, 0xFF, 0xFF,
+                       0xFF, 0x80, page, 0x01]);
+}
+
+// ---- décodage des notifications (traduit du pont Python) ------------------
+function decodeTrainer(dv) {                        // pages FE-C du Tacx
+  if (dv.byteLength < 5) return;
+  const page = dv.getUint8(4);
+  if (page === 16 && dv.byteLength >= 10) {         // vitesse
+    const vitesse = Math.round(dv.getUint16(8, true) * 0.001 * 10) / 10;
+    state.tacx.s = vitesse; stats.tacx++;
+  } else if (page === 25 && dv.byteLength >= 11) {  // puissance + cadence
+    stats.tacx++;
+    state.tacx.c = dv.getUint8(6) !== 255 ? dv.getUint8(6) : null;
+    state.tacx.p = dv.getUint8(9) + ((dv.getUint8(10) & 0x0F) << 8);
+    push("tacx", state.tacx.p, state.tacx.c);
+  }
+}
+const CRANK = { revs: null, evt: null };
+function decodePedales(dv) {                        // Cycling Power (Assioma)
+  if (dv.byteLength < 4) return;
+  stats.ass++;
+  const flags = dv.getUint16(0, true);
+  const p = dv.getUint16(2, true);
+  state.ass.p = p;
+  let offset = 4;
+  if ((flags & 0x0001) && dv.byteLength >= offset + 1) {  // équilibre pédale
+    const b = dv.getUint8(offset);
+    if (b < 128) state.ass.bal = Math.round(b / 2) + " / " + (100 - Math.round(b / 2));
+    offset += 1;
+  }
+  if (flags & 0x0002) offset += 2;                   // couple accumulé
+  if (flags & 0x0004) offset += 6;                   // données roue
+  let cad = undefined;
+  if ((flags & 0x0008) && dv.byteLength >= offset + 4) {  // données manivelle (bit 3)
+    const revs = dv.getUint16(offset, true);
+    const evt = dv.getUint16(offset + 2, true);
+    if (CRANK.evt !== null && evt !== CRANK.evt) {
+      const dt = ((evt - CRANK.evt + 65536) % 65536) / 1024;
+      const dr = (revs - CRANK.revs + 65536) % 65536;
+      if (0 < dt < 10) { cad = Math.round(dr / dt * 60); state.ass.c = cad; }
+    }
+    CRANK.revs = revs; CRANK.evt = evt;
+  }
+  push("ass", p, cad);
+}
+function decodeCardio(dv) {                         // Heart Rate (Polar H10)
+  if (dv.byteLength < 2) return;
+  const bpm = (dv.getUint8(0) & 0x01) ? dv.getUint16(1, true) : dv.getUint8(1);
+  if (30 <= bpm && bpm <= 250) {
+    stats.hr++;
+    state.hr = bpm;
+    if (bpm > state.hrMax) state.hrMax = bpm;
+    state.hrSum += bpm; state.hrN++;
+    push("hr", bpm);
+  }
+}
+
+// ---- connexions (chacune nécessite un appui : exergue utilisateur) --------
+async function connecterTacx() {
+  try {
+    const dev = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "Tacx" }, { namePrefix: "TACX" }, { namePrefix: "NEO" },
+                { services: [TACX_SERVICE] }]
+    });
+    const server = await dev.gatt.connect();
+    const svc = await server.getPrimaryService(TACX_SERVICE);
+    BLE.tacx.rx = await svc.getCharacteristic(TACX_RX);
+    BLE.tacx.tx = await svc.getCharacteristic(TACX_TX);
+    BLE.tacx.dev = dev;
+    await BLE.tacx.tx.startNotifications();
+    BLE.tacx.tx.addEventListener("characteristicvaluechanged", e => decodeTrainer(e.target.value));
+    dev.addEventListener("gattserverdisconnected", () => {
+      BLE.tacx.rx = BLE.tacx.tx = null;
+      $("dotTacx").classList.remove("on");
+      $("tacxName").textContent = "Tacx : déconnecté — appuyez pour reconnecter";
+      $("status").textContent = "Tacx déconnecté";
+      log("⚠ Tacx déconnecté.");
+    });
+    // amorce du flux FE-C (comme le pont Python)
+    await envoyerTrame(pktTrack(0));
+    await envoyerTrame(pktRequest(16));
+    await envoyerTrame(pktRequest(71));
+    $("dotTacx").classList.add("on");
+    $("tacxName").textContent = "Tacx : " + (dev.name || "connecté");
+    $("status").textContent = "Tacx connecté (" + VERSION + ")";
+    log("Tacx connecté : " + (dev.name || "?") + " — pédalez pour réveiller les mesures.");
+  } catch (e) {
+    if (e.name !== "NotFoundError") log("Erreur Tacx : " + e.message);
+  }
+}
+async function connecterAssioma() {
+  try {
+    const dev = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "Assioma" }, { services: [CP_SERVICE] }]
+    });
+    const server = await dev.gatt.connect();
+    const svc = await server.getPrimaryService(CP_SERVICE);
+    BLE.ass = await svc.getCharacteristic(CP_MEASURE);
+    await BLE.ass.startNotifications();
+    BLE.ass.addEventListener("characteristicvaluechanged", e => decodePedales(e.target.value));
+    // note : la pédale « esclave » n'expose pas le service puissance —
+    // dans le sélecteur, choisissez la pédale maître (celle qui apparaît).
+    $("dotAssioma").classList.add("on");
+    $("assName").textContent = "Pédales : " + (dev.name || "connectées");
+    log("Assioma connectée : " + (dev.name || "?") + " (pédale maître).");
+  } catch (e) {
+    if (e.name !== "NotFoundError") log("Erreur Assioma : " + e.message);
+  }
+}
+async function connecterCardio() {
+  try {
+    const dev = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "Polar" }, { namePrefix: "H10" }, { services: [HR_SERVICE] }]
+    });
+    const server = await dev.gatt.connect();
+    const svc = await server.getPrimaryService(HR_SERVICE);
+    BLE.hr = await svc.getCharacteristic(HR_MEASURE);
+    await BLE.hr.startNotifications();
+    BLE.hr.addEventListener("characteristicvaluechanged", e => decodeCardio(e.target.value));
+    $("dotHR").classList.add("on");
+    $("hrName").textContent = "Cardio : " + (dev.name || "connecté");
+    log("Cardio connecté : " + (dev.name || "?"));
+  } catch (e) {
+    if (e.name !== "NotFoundError") log("Erreur cardio : " + e.message);
+  }
+}
+$("btnTacx").onclick = connecterTacx;
+$("btnAss").onclick = connecterAssioma;
+$("btnHr").onclick = connecterCardio;
+
+async function envoyerTrame(u8) {
+  if (!BLE.tacx.rx) { log("Tacx non connecté — commande ignorée."); return false; }
+  try {
+    await BLE.tacx.rx.writeValue(u8);
+    return true;
+  } catch (e) {
+    log("Erreur commande trainer : " + e.message);
+    return false;
+  }
+}
+
+// ============================== commandes ==================================
+async function cmdErg(w) { if (await envoyerTrame(pktTargetPower(Math.round(w)))) log("ERG " + w + " W"); }
+async function cmdSlope(g) { if (await envoyerTrame(pktTrack(g))) log("Pente " + g + " %"); }
+async function cmdStop() { if (await envoyerTrame(pktBasicRes(0))) log("STOP — résistance à zéro."); }
+$("btnErg").onclick = () => cmdErg(+$("ergW").value);
+$("btnSlope").onclick = () => cmdSlope(+$("slope").value);
+$("btnStop").onclick = () => cmdStop();
+
+// ============================== Wake Lock ===================================
+let wakeLock = null, wakeOn = false;
+async function keepAwake() {
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+    wakeOn = true;
+    $("btnWake").textContent = "💡 Écran maintenu allumé : ON";
+    log("Écran maintenu allumé (Wake Lock).");
+  } catch (e) { log("Wake Lock indisponible : " + e.message); }
+}
+$("btnWake").onclick = async () => {
+  if (wakeOn && wakeLock) {
+    await wakeLock.release();
+    wakeOn = false;
+    $("btnWake").textContent = "💡 Écran maintenu allumé : off";
+  } else await keepAwake();
+};
+document.addEventListener("visibilitychange", () => {
+  // Chrome relâche le Wake Lock quand l'onglet passe en arrière-plan : on le reprend
+  if (document.visibilityState === "visible" && wakeOn && !wakeLock) keepAwake();
+});
+
+// ============================== programme CSV ================================
+let programme = null;
+const test = { actif: false, t0: 0, idx: -1, envoyes: 0, t0Ms: 0 };
+
+function _txt(s) {           // normalisation : minuscule, sans accents ni espaces
+  return (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase().replace(/\s+/g, "").trim();
+}
+function parserProgrammeCsv(texte) {
+  // découpe des lignes et cellules ; séparateur ; ou , ; guillemets tolérés
+  const lignes = texte.replace(/\r/g, "").split("\n").filter(l => l.trim() !== "");
+  const sep = (lignes[0].split(";").length >= lignes[0].split(",").length) ? ";" : ",";
+  const rows = lignes.map(l => {
+    const out = []; let cur = "", q = false;
+    for (let i = 0; i < l.length; i++) {
+      const c = l[i];
+      if (c === '"') { if (q && l[i+1] === '"') { cur += '"'; i++; } else q = !q; }
+      else if (c === sep && !q) { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map(c => c.trim());
+  });
+  // 1) en-têtes : première ligne avec >= 2 mots-clés ; titre avant si présent
+  const cles = ["palier", "numero", "duree", "puissance", "cadence", "vitesse", "pente"];
+  let titre = null, ligneEntetes = -1;
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    let score = 0;
+    for (const cell of rows[r]) {
+      const t = _txt(cell);
+      if (!t) continue;
+      if (cles.some(k => t.includes(k))) score++;
+      else if (titre === null && ligneEntetes === -1 && r === 0 && rows[r].filter(x => x).length === 1)
+        titre = cell;
+    }
+    if (score >= 2 && ligneEntetes === -1) ligneEntetes = r;
+  }
+  if (ligneEntetes === -1) throw new Error("ligne d'en-têtes introuvable (colonnes Palier/Durée/Puissance ?)");
+  // 2) détection des colonnes par en-têtes (tolérant aux renommages)
+  const entetes = {};
+  rows[ligneEntetes].forEach((cell, i) => {
+    const t = _txt(cell);
+    if (!t) return;
+    const tNum = t.replace(/[^a-z0-9]/g, "");          // « n° » -> « n »
+    if (tNum === "n" || tNum === "no" || tNum === "num" || t.includes("numero") || t.includes("palier")) entetes.num = i;
+    else if (t.includes("duree")) entetes.duree = i;
+    else if (t.includes("puissance")) entetes.p = i;
+    else if (t.includes("cadence") || t.includes("vitesse") || t.includes("tr/min") || t.includes("rpm") || t.includes("km/h")) entetes.cad = i;
+    else if (t.includes("erg")) entetes.erg = i;
+    else if (t.includes("pente")) entetes.pente = i;
+    else if (t.includes("comment")) entetes.com = i;
+  });
+  // valeurs par défaut du protocole (B..H -> index 1..7) ; en CSV le n° de
+  // palier est généralement en colonne 0 (colonne A d'Excel). NB : « n° »
+  // normalisé en NFD donne "no" -> on accepte aussi "no" et "n." comme alias.
+  if (entetes.num === undefined) entetes.num = 0;
+  if (entetes.num === entetes.duree) entetes.num = -1;   // pas de colonne n° : numérotation auto
+  if (entetes.duree === undefined) entetes.duree = 2;
+  if (entetes.p === undefined) entetes.p = 3;
+  if (entetes.cad === undefined && entetes.pente !== 4) entetes.cad = 4;
+  if (entetes.erg === undefined) entetes.erg = 5;
+  if (entetes.pente === undefined) entetes.pente = 6;
+  if (entetes.com === undefined) entetes.com = 7;
+  // 3) lecture des paliers
+  const paliers = [];
+  for (let r = ligneEntetes + 1; r < rows.length; r++) {
+    const row = rows[r];
+    const dureeTxt = row[entetes.duree];
+    const duree = dureeTxt !== undefined && dureeTxt !== "" ? Math.round(parseFloat(dureeTxt.replace(",", "."))) : NaN;
+    if (!isFinite(duree) || duree <= 0) continue;
+    let num = entetes.num >= 0 ? parseFloat(row[entetes.num]) : NaN;
+    num = isFinite(num) ? Math.round(num) : paliers.length + 1;
+    const pTxt = (row[entetes.p] || "").replace(",", ".");
+    const p = pTxt !== "" && isFinite(parseFloat(pTxt)) ? parseFloat(pTxt) : 0;
+    const cadTxt = (row[entetes.cad] || "").replace(",", ".");
+    const cad = cadTxt !== "" && isFinite(parseFloat(cadTxt)) ? parseFloat(cadTxt) : null;
+    const ergTxt = _txt(row[entetes.erg]);
+    const erg = ergTxt === "" ? true : (ergTxt !== "non");
+    const penTxt = (row[entetes.pente] || "").replace(",", ".");
+    const pente = penTxt !== "" && isFinite(parseFloat(penTxt)) ? parseFloat(penTxt) : null;
+    const com = row[entetes.com] || null;
+    paliers.push({ n: num, duree, w: p, cad, erg, pente, comment: com });
+  }
+  if (!paliers.length) throw new Error("aucun palier trouvé après les en-têtes");
+  return { titre, paliers };
+}
+
+$("btnCharger").onclick = () => $("fichierProg").click();
+$("fichierProg").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const prog = parserProgrammeCsv(reader.result);
+      recevoirProgramme(prog.titre || f.name.replace(/\.csv$/i, ""), prog.paliers);
+    } catch (err) {
+      log("Erreur lecture CSV : " + err.message);
+      $("testInfo").innerHTML = "<span style='color:#f87171'>Erreur CSV : " + err.message + "</span>";
+    }
+  };
+  reader.readAsText(f, "utf-8");
+  e.target.value = "";
+};
+
+function recevoirProgramme(nom, paliers) {
+  const total = paliers.reduce((a, p) => a + p.duree, 0);
+  programme = { nom, paliers, total };
+  test.actif = false; test.idx = -1; test.t0 = 0;
+  $("btnTest").disabled = false; $("btnAbort").disabled = true;
+  const mn = Math.floor(total / 60), s = total % 60;
+  $("testInfo").innerHTML = "<b style='color:#4ade80'>" + nom + "</b> — "
+    + paliers.length + " paliers, " + mn + " min " + s + " s au total. "
+    + "<span style='color:#94a3b8'>« ▶ Début test » quand vous êtes prêt.</span>";
+  let html = "<table style='width:100%;border-collapse:collapse;font-size:.8rem'>";
+  html += "<tr style='color:#94a3b8'><td>#</td><td>Durée</td><td>Puissance</td><td>Cadence</td><td>Mode</td><td>Commentaire</td></tr>";
+  paliers.forEach(p => {
+    html += "<tr id='pal" + p.n + "' style='color:#e2e8f0;border-top:1px solid #334155'>"
+      + "<td>" + p.n + "</td><td>" + p.duree + " s</td>"
+      + "<td style='color:#f59e0b;font-weight:700'>" + p.w + " W</td>"
+      + "<td>" + (p.cad || "–") + " tr/min</td>"
+      + "<td>" + (p.erg ? "ERG" : "pente " + p.pente + " %") + "</td>"
+      + "<td style='color:#94a3b8'>" + (p.comment || "") + "</td></tr>";
+  });
+  html += "</table>";
+  $("progTable").innerHTML = html;
+  $("progDetails").open = true;
+  log("Programme chargé : " + paliers.length + " paliers — prêt pour « Début test ».");
+}
+
+function palierAT(t) {
+  let cumul = 0;
+  for (let i = 0; i < programme.paliers.length; i++) {
+    cumul += programme.paliers[i].duree;
+    if (t < cumul) return i;
+  }
+  return programme.paliers.length;
+}
+function consigneAT(t) {
+  const i = palierAT(t);
+  const p = programme.paliers[Math.min(i, programme.paliers.length - 1)];
+  return p.erg ? p.w : null;
+}
+
+$("btnTest").onclick = () => {
+  if (!programme) return;
+  if (!BLE.tacx.rx) { log("Connectez d'abord le Tacx (bouton 🔌 Tacx)."); return; }
+  test.actif = true; test.t0 = Date.now(); test.t0Ms = test.t0; test.idx = -1;
+  lireSeuilsForm();
+  SEUILS.estW1 = null; SEUILS.estW2 = null;
+  if (wakeOn && !wakeLock) keepAwake();           // veille à garder l'écran allumé
+  $("btnTest").disabled = true; $("btnAbort").disabled = false;
+  log("▶ Début du test : " + programme.nom);
+};
+$("btnAbort").onclick = () => finTest(true);
+
+function finTest(annule) {
+  if (!test.actif) return;
+  test.actif = false;
+  if (programme) {
+    const t0 = (test.t0 - T0) / 1000;
+    const snap = { label: new Date(test.t0).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+                   t0Ms: test.t0Ms,
+                   t: [], tacx: [], ass: [], hr: [] };
+    for (let i = 0; i < series.t.length; i++) {
+      const dt = series.t[i] - t0;
+      if (dt >= -25 && dt <= programme.total + 20) {
+        snap.t.push(Math.round(dt * 10) / 10);
+        snap.tacx.push(series.tacx[i]); snap.ass.push(series.ass[i]); snap.hr.push(series.hr[i]);
+      }
+    }
+    if (snap.t.length > 5) {
+      sessions.push(snap);
+      if (sessions.length > 4) sessions.shift();
+      log("Tracé de la séance de " + snap.label + " conservé (" + sessions.length + " sortie(s) en mémoire).");
+    }
+  }
+  cmdStop();
+  $("btnTest").disabled = false; $("btnAbort").disabled = true;
+  $("testInfo").textContent = annule ? "Test interrompu — « 📤 Exporter » pour sauvegarder vos mesures."
+                                      : "Test terminé ✔ — « 📤 Exporter » pour sauvegarder vos mesures.";
+  log(annule ? "Test interrompu." : "✔ Test terminé.");
+}
+
+// ========================= seuils VT1 / VT2 en temps réel ====================
+const SEUILS = { fc1: 109, fc2: 137, w1: 175, w2: 275, estW1: null, estW2: null, vocal: false };
+function lireSeuilsForm() {
+  SEUILS.fc1 = +$("seuilFc1").value || 109;
+  SEUILS.fc2 = +$("seuilFc2").value || 137;
+  SEUILS.w1 = +$("seuilW1").value || 175;
+  SEUILS.w2 = +$("seuilW2").value || 275;
+}
+function direSeuil(txt) {
+  if (!SEUILS.vocal || !window.speechSynthesis) return;
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance(txt)); } catch (_) {}
+}
+function fcLissee() {
+  const tNow = (Date.now() - T0) / 1000;
+  let s = 0, n = 0;
+  for (let i = series.hr.length - 1; i >= 0; i--) {
+    if (tNow - series.t[i] > 5) break;
+    if (series.hr[i] !== null) { s += series.hr[i]; n++; }
+  }
+  return n ? s / n : null;
+}
+function majSeuilsLive() {
+  lireSeuilsForm();
+  const p = test.idx >= 0 && programme ? programme.paliers[test.idx] : null;
+  const w = p && p.erg ? p.w : null;
+  const fc = fcLissee();
+  let html = "";
+  if (w !== null) {
+    let zone, col;
+    if (w < SEUILS.w1) { zone = "Endurance (sous VT1)"; col = "#60a5fa"; }
+    else if (w < SEUILS.w2) { zone = "Tempo (VT1 → VT2)"; col = "#f59e0b"; }
+    else { zone = "Seuil + (au-dessus VT2)"; col = "#f87171"; }
+    html += "<span style='font-weight:700;color:" + col + "'>Zone : " + zone + "</span>";
+  } else html += "<span style='color:#64748b'>Zone : —</span>";
+  if (fc !== null) html += " <span style='color:#64748b'>| FC lissée " + Math.round(fc) + " bpm</span>";
+  if (test.actif && fc !== null && w !== null) {
+    if (SEUILS.estW1 === null && fc >= SEUILS.fc1) {
+      SEUILS.estW1 = w;
+      log("◆ VT1 du jour estimé : " + w + " W (FC lissée " + Math.round(fc) + " ≥ " + SEUILS.fc1 + " bpm)");
+      direSeuil("Seuil un franchi. " + w + " watts.");
+    }
+    if (SEUILS.estW2 === null && fc >= SEUILS.fc2) {
+      SEUILS.estW2 = w;
+      log("◆ VT2 du jour estimé : " + w + " W (FC lissée " + Math.round(fc) + " ≥ " + SEUILS.fc2 + " bpm)");
+      direSeuil("Seuil deux franchi. " + w + " watts.");
+    }
+  }
+  html += "<br><span style='color:#94a3b8'>VT1 du jour : </span>"
+    + (SEUILS.estW1 !== null ? "<b style='color:#60a5fa'>" + SEUILS.estW1 + " W</b> (hôpital " + SEUILS.w1 + " W)"
+                              : "<span style='color:#64748b'>en attente — FC ≥ " + SEUILS.fc1 + " bpm</span>");
+  html += " <span style='color:#94a3b8'>| VT2 du jour : </span>"
+    + (SEUILS.estW2 !== null ? "<b style='color:#f87171'>" + SEUILS.estW2 + " W</b> (hôpital " + SEUILS.w2 + " W)"
+                              : "<span style='color:#64748b'>en attente — FC ≥ " + SEUILS.fc2 + " bpm</span>");
+  $("seuilsLive").innerHTML = html;
+}
+["seuilFc1","seuilW1","seuilFc2","seuilW2"].forEach(id =>
+  $(id).onchange = () => { lireSeuilsForm(); majSeuilsLive(); });
+$("seuilVoice").onclick = () => {
+  SEUILS.vocal = !SEUILS.vocal;
+  $("seuilVoice").textContent = "📢 Annonces : " + (SEUILS.vocal ? "ON" : "off");
+  if (SEUILS.vocal) direSeuil("Annonces des seuils activées.");
+  if (!SEUILS.vocal && window.speechSynthesis) try { speechSynthesis.cancel(); } catch (_) {}
+};
+
+// moteur du test : pilote les paliers en temps réel
+setInterval(() => {
+  if (!test.actif || !programme) return;
+  const t = (Date.now() - test.t0) / 1000;
+  const i = palierAT(t);
+  if (i >= programme.paliers.length) { finTest(false); return; }
+  if (i !== test.idx) {
+    test.idx = i;
+    const p = programme.paliers[i];
+    if (p.erg) cmdErg(p.w); else cmdSlope(p.pente);
+    $("ergW").value = p.erg ? p.w : "";
+    log("Palier " + p.n + "/" + programme.paliers.length + " → "
+        + (p.erg ? p.w + " W" : "pente " + p.pente + " %") + " (" + p.duree + " s)");
+    document.querySelectorAll("[id^=pal]").forEach(tr => tr.style.background = "");
+    const actif = $("pal" + p.n);
+    if (actif) actif.style.background = "#14532d";
+  }
+  const cumul = programme.paliers.slice(0, i).reduce((a, p) => a + p.duree, 0);
+  const reste = Math.max(0, cumul + programme.paliers[i].duree - t);
+  const p = programme.paliers[i];
+  const mm = String(Math.floor(reste / 60)).padStart(2, "0");
+  const ss = String(Math.floor(reste % 60)).padStart(2, "0");
+  $("testInfo").innerHTML = "Palier <b style='color:#4ade80'>" + p.n + "/" + programme.paliers.length
+    + "</b> — " + (p.erg ? "<b style='color:#f59e0b'>" + p.w + " W</b>" : "pente " + p.pente + " %")
+    + " — reste <b>" + mm + ":" + ss + "</b>"
+    + (p.cad ? " — cadence cible " + p.cad + " tr/min" : "");
+  majSeuilsLive();
+}, 250);
+
+// ============================== commande vocale =============================
+const UNITS = { "zéro":0,"zero":0,"un":1,"une":1,"deux":2,"trois":3,"quatre":4,"cinq":5,"six":6,
+  "sept":7,"huit":8,"neuf":9,"dix":10,"onze":11,"douze":12,"treize":13,"quatorze":14,"quinze":15,
+  "seize":16,"vingt":20,"vingts":20,"trente":30,"quarante":40,"cinquante":50,"soixante":60,
+  "cent":100,"cents":100,"mille":1000 };
+function parseNombre(txt) {
+  const m = txt.match(/\d+/);
+  if (m) return parseInt(m[0], 10);
+  const mots = txt.toLowerCase().replace(/[-',]/g, " ").split(/\s+/).filter(Boolean);
+  let cur = 0;
+  for (let i = 0; i < mots.length; i++) {
+    const w = mots[i];
+    if (w === "et") continue;
+    if (w === "quatre" && (mots[i+1] === "vingt" || mots[i+1] === "vingts")) {
+      cur += 80; i++;
+      if (mots[i+1] === "dix") { cur += 10; i++; }
+      continue;
+    }
+    if (w in UNITS) {
+      if (w === "cent" || w === "cents") cur = (cur === 0 ? 1 : cur) * 100;
+      else if (w === "mille") cur = (cur === 0 ? 1 : cur) * 1000;
+      else cur += UNITS[w];
+    }
+  }
+  return cur;
+}
+function executerVoix(phrase) {
+  const p = phrase.toLowerCase();
+  $("voiceHeard").textContent = "« " + phrase + " »";
+  if (p.includes("stop") || p.includes("arrêt") || p.includes("arret")) {
+    if (test.actif) {
+      log("🔊 « stop » vocal — test interrompu proprement.");
+      finTest(true);
+    } else cmdStop();
+    return;
+  }
+  if (p.includes("watt") || /\d/.test(p)) {
+    const n = parseNombre(p);
+    if (test.actif) {
+      log("🔊 Ordre vocal " + n + " W ignoré — test en cours, le programme pilote le trainer. Dites « stop » pour l'interrompre.");
+      return;
+    }
+    if (n > 0 && n <= 1500) { cmdErg(n); $("ergW").value = n; }
+    else log("Ordre vocal non compris : " + phrase);
+  }
+}
+let reco = null, voiceOn = false, micStream = null;
+let dernierErr = "", dernierErrT = 0;
+function relancerReco(delai) {
+  if (!voiceOn || !reco) return;
+  setTimeout(() => { if (voiceOn && reco) { try { reco.start(); } catch (_) {} } }, delai || 150);
+}
+async function demarrerVoix() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { log("Vocal non supporté sur ce navigateur (essayez Chrome)."); return; }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    log("Micro indisponible : " + e.message);
+    return;
+  }
+  reco = new SR();
+  reco.lang = "fr-FR"; reco.continuous = true; reco.interimResults = false;
+  reco.onresult = e => {
+    const phrase = e.results[e.results.length - 1][0].transcript.trim();
+    log("Entendu : " + phrase);
+    executerVoix(phrase);
+  };
+  reco.onerror = e => {
+    const maintenant = Date.now();
+    if (e.error !== dernierErr || maintenant - dernierErrT > 30000) {
+      log("Micro coupé (" + e.error + ") — reconnexion automatique…");
+      dernierErr = e.error; dernierErrT = maintenant;
+    }
+    relancerReco(1000);
+  };
+  reco.onend = () => relancerReco(150);
+  try { reco.start(); } catch (_) {}
+  voiceOn = true;
+  $("voiceBtn").classList.add("mic-on");
+  $("voiceBtn").textContent = "🎤 Micro actif — couper";
+  log("Micro actif en continu (reconnexion automatique en cas de coupure).");
+}
+function arreterVoix() {
+  voiceOn = false;
+  if (reco) { try { reco.stop(); } catch (_) {} reco = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  dernierErr = "";
+  $("voiceBtn").classList.remove("mic-on");
+  $("voiceBtn").textContent = "🎤 Commande vocale";
+  $("voiceHeard").textContent = "";
+}
+$("voiceBtn").onclick = () => voiceOn ? arreterVoix() : demarrerVoix();
+
+// ============================== affichage ==================================
+function setTxt(id, v) { $(id).textContent = (v === null || v === undefined) ? "–" : v; }
+function majCompteur(idD, idU, v) {
+  const n = (v === null || v === undefined) ? 0 : Math.min(99, Math.round(v));
+  $(idD).textContent = Math.floor(n / 10);
+  $(idU).textContent = n % 10;
+}
+setInterval(() => {
+  try {
+    setTxt("tacxP", state.tacx.p); setTxt("tacxC", state.tacx.c); setTxt("tacxS", state.tacx.s);
+    setTxt("assP", state.ass.p); setTxt("assC", state.ass.c); setTxt("assBal", state.ass.bal);
+    setTxt("hrBpm", state.hr); setTxt("hrMax", state.hrMax || null);
+    setTxt("hrAvg", state.hrN ? Math.round(state.hrSum / state.hrN) : null);
+    majCompteur("cptTacx", "cptTacxU", state.tacx.c);
+    majCompteur("cptAss", "cptAssU", state.ass.c);
+    $("recInfo").textContent = "paquets — Tacx : " + stats.tacx + ", Pédales : " + stats.ass + ", Cardio : " + stats.hr;
+    drawChart();
+  } catch (err) { log("Erreur affichage : " + err.message); }
+}, 1000);
+
+const cv = $("chart"), ctx = cv.getContext("2d");
+function drawChart() {
+  const W = cv.width = Math.max(400, cv.clientWidth || 1150) * (window.devicePixelRatio || 1);
+  const H = cv.height = 240 * (window.devicePixelRatio || 1);
+  ctx.clearRect(0, 0, W, H);
+  let tStart, tEnd, mode = "libre", decalage = 0;
+  if (programme && test.t0) {
+    mode = "test";
+    decalage = (test.t0 - T0) / 1000;
+    tStart = -20;
+    tEnd = programme.total + 15;
+  } else if (programme) {
+    mode = "apercu";
+    tStart = 0;
+    tEnd = programme.total;
+  } else {
+    tEnd = Math.max(60, ...series.t.slice(-1));
+    tStart = Math.max(0, tEnd - 300);
+  }
+  const watts = series.tacx.filter(x => x).concat(series.ass.filter(x => x));
+  if (programme) programme.paliers.forEach(p => { if (p.erg) watts.push(p.w); });
+  for (const s of sessions) { watts.push(...s.tacx.filter(x => x), ...s.ass.filter(x => x)); }
+  const yMax = Math.max(100, ...watts);
+  const hrs = series.hr.filter(x => x !== null);
+  for (const s of sessions) hrs.push(...s.hr.filter(x => x !== null));
+  let hrLo, hrHi;
+  if (hrs.length >= 2) {
+    const mn = Math.min(...hrs), mx = Math.max(...hrs);
+    const marge = Math.max(8, (mx - mn) * 0.2);
+    hrLo = mn - marge; hrHi = mx + marge;
+  } else { hrLo = 40; hrHi = 180; }
+  const X = t => (t - tStart) / (tEnd - tStart) * W;
+  const Y = v => H - (v / yMax) * (H - 20) - 10;
+  const YHR = v => H - (v - hrLo) / (hrHi - hrLo) * (H - 20) - 10;
+  ctx.strokeStyle = "#334155"; ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const y = 10 + g * (H - 20) / 4;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  const fs = 11 * (window.devicePixelRatio || 1);
+  ctx.font = fs + "px sans-serif"; ctx.fillStyle = "#64748b";
+  for (let g = 0; g <= 4; g++) {
+    const y = 10 + g * (H - 20) / 4;
+    ctx.textAlign = "left";
+    ctx.fillText(Math.round(yMax * (4 - g) / 4) + " W", 4, y - 3);
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round(hrLo + (hrHi - hrLo) * (4 - g) / 4) + " bpm", W - 4, y - 3);
+  }
+  if (programme && mode !== "libre") {
+    const dpr = (window.devicePixelRatio || 1);
+    for (const [w, lab, col] of [[SEUILS.w1, "VT1 " + SEUILS.w1 + " W", "#60a5fa"],
+                                 [SEUILS.w2, "VT2 " + SEUILS.w2 + " W", "#f87171"]]) {
+      const y = Y(w);
+      ctx.save();
+      ctx.setLineDash([6 * dpr, 5 * dpr]);
+      ctx.strokeStyle = col + "88"; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = col; ctx.font = 11 * dpr + "px sans-serif"; ctx.textAlign = "right";
+      ctx.fillText(lab, W - 8, y - 4 * dpr);
+      ctx.restore();
+    }
+  }
+  function lisser(arr, offset) {
+    const parSeconde = new Map();
+    for (let i = 0; i < series.t.length; i++) {
+      const v = arr[i]; if (v === null || v === undefined) continue;
+      const b = Math.floor(series.t[i] - offset);
+      if (!parSeconde.has(b)) parSeconde.set(b, []);
+      parSeconde.get(b).push(v);
+    }
+    const pts = [];
+    for (let t = Math.ceil(tStart); t < tEnd; t++) {
+      const g = parSeconde.get(t);
+      if (g) pts.push({ t: t + 0.5, v: g.reduce((a, b) => a + b, 0) / g.length });
+    }
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const w = pts.slice(Math.max(0, i - 2), i + 1);
+      out.push({ t: pts[i].t, v: w.reduce((a, x) => a + x.v, 0) / w.length });
+    }
+    return out;
+  }
+  function ligneLissee(arr, color, yFn, width, offset) {
+    const pts = lisser(arr, offset || 0);
+    if (pts.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = width * (window.devicePixelRatio || 1);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(X(pts[0].t), yFn(pts[0].v));
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(X(pts[i].t), yFn(pts[i].v));
+    ctx.stroke();
+  }
+  if (mode !== "libre" && sessions.length) {
+    const dpr = (window.devicePixelRatio || 1);
+    const fantome = (s, arr, color, yFn) => {
+      const parSec = new Map();
+      for (let i = 0; i < s.t.length; i++) {
+        const v = arr[i];
+        if (v === null || v === undefined) continue;
+        const b = Math.round(s.t[i]);
+        if (!parSec.has(b)) parSec.set(b, []);
+        parSec.get(b).push(v);
+      }
+      const pts = [...parSec.keys()].sort((a, b) => a - b).map(k => ({ t: k, v: parSec.get(k).reduce((x, y) => x + y, 0) / parSec.get(k).length }));
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.globalAlpha = 0.38;
+      ctx.strokeStyle = color; ctx.lineWidth = 3 * dpr;
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(X(pts[0].t), yFn(pts[0].v));
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(X(pts[i].t), yFn(pts[i].v));
+      ctx.stroke();
+      ctx.restore();
+    };
+    for (const s of sessions) {
+      if (mode === "test" && s.t0Ms === test.t0Ms) continue;
+      fantome(s, s.tacx, "#f59e0b", Y);
+      fantome(s, s.ass, "#38bdf8", Y);
+      fantome(s, s.hr, "#fb7185", YHR);
+    }
+    const d = sessions[sessions.length - 1];
+    ctx.save();
+    ctx.globalAlpha = 0.75; ctx.fillStyle = "#94a3b8";
+    ctx.font = 11 * (window.devicePixelRatio || 1) + "px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText("atténué : sortie" + (sessions.length > 1 ? "s" : "") + " de " + sessions.map(s => s.label).join(", "), 10, 22);
+    ctx.restore();
+  }
+  if (mode !== "apercu") {
+    ligneLissee(series.tacx, "#f59e0b", Y, 4, decalage);
+    ligneLissee(series.ass, "#38bdf8", Y, 4, decalage);
+    ligneLissee(series.hr, "#fb7185", YHR, 5, decalage);
+  }
+  if (programme && mode !== "libre") {
+    const t0 = 0;
+    const dpr = (window.devicePixelRatio || 1);
+    ctx.save();
+    ctx.setLineDash([9 * dpr, 6 * dpr]);
+    ctx.strokeStyle = "#4ade80"; ctx.lineWidth = 4 * dpr;
+    ctx.lineJoin = "miter"; ctx.lineCap = "butt";
+    ctx.beginPath();
+    let cumul = 0, started = false;
+    for (const p of programme.paliers) {
+      if (p.erg) {
+        const x1 = X(t0 + cumul), x2 = X(t0 + cumul + p.duree), y = Y(p.w);
+        if (!started) { ctx.moveTo(x1, y); started = true; }
+        else ctx.lineTo(x1, y);
+        ctx.lineTo(x2, y);
+      }
+      started = false;
+      cumul += p.duree;
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = "#64748b"; ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+  ctx.strokeRect(2, 2, W - 4, H - 4);
+  ctx.fillStyle = "#94a3b8"; ctx.textAlign = "left";
+  ctx.font = 12 * (window.devicePixelRatio || 1) + "px sans-serif";
+  ctx.fillText("points : Tacx " + series.tacx.filter(x => x !== null).length
+    + " | Pédales " + series.ass.filter(x => x !== null).length
+    + " | Cardio " + series.hr.filter(x => x !== null).length, 10, H - 10);
+  if (mode === "apercu") {
+    ctx.fillStyle = "#4ade80"; ctx.font = 16 * (window.devicePixelRatio || 1) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Prévisualisation du programme — ▶ « Début test » pour lancer", W / 2, H / 2 - 20);
+  } else if (series.t.length === 0) {
+    ctx.fillStyle = "#f59e0b"; ctx.font = 16 * (window.devicePixelRatio || 1) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Aucun appareil connecté — appuyez sur 🔌 Tacx, 🔌 Assioma, 🔌 Cardio", W / 2, H / 2);
+  }
+}
+
+// ============================== export CSV ==================================
+$("btnCsv").onclick = () => {
+  let csv = "secondes;puissance_tacx_W;puissance_assioma_W;cardio_bpm;cadence_tacx;cadence_assioma\n";
+  for (let i = 0; i < series.t.length; i++) {
+    csv += series.t[i].toFixed(1) + ";" + (series.tacx[i] ?? "") + ";" + (series.ass[i] ?? "") + ";"
+      + (series.hr[i] ?? "") + ";" + (series.cadT[i] ?? "") + ";" + (series.cadA[i] ?? "") + "\n";
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "seance_tacx_" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".csv";
+  a.click();
+  log("Séance exportée en CSV (téléchargements de la tablette).");
+};
+</script>
+</body>
+</html>
